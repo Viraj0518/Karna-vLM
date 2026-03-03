@@ -23,7 +23,7 @@ logger = logging.getLogger("karna-ocr")
 # ── Config ──────────────────────────────────────────────────────────────────
 
 VLLM_URL = f"http://localhost:{os.getenv('VLLM_PORT', '8000')}/v1/chat/completions"
-MODEL_NAME = "karna-ocr"
+MODEL_NAME = os.getenv("MODEL_NAME", "karna-ocr")
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 # ── Prompt Library ──────────────────────────────────────────────────────────
