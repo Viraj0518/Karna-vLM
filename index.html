@@ -137,6 +137,7 @@
                     <div class="output-toggle">
                         <button class="toggle-btn active" id="toggleFields" onclick="switchView('fields')">📋 Fields</button>
                         <button class="toggle-btn" id="toggleFullText" onclick="switchView('fulltext')">📝 Full Text</button>
+                        <button class="toggle-btn" id="toggleMeta" onclick="switchView('metadata')">🔍 Metadata</button>
                     </div>
                     <div class="result-json" id="resultJson"></div>
                     <div class="result-actions" style="margin-top: 16px;">
@@ -167,6 +168,7 @@
         let selectedFile = null;
         let lastResult = null;      // parsed JSON (fields view)
         let lastRawOutput = null;   // raw model text (full text view)
+        let lastMetadata = null;    // file/image metadata
         let currentView = 'fields';
         let lastFileName = 'document';
 
@@ -220,6 +222,7 @@
                 
                 lastResult = data.data;
                 lastRawOutput = data.raw_output;
+                lastMetadata = data.metadata;
                 
                 statusEl.className = 'status success';
                 statusEl.textContent = `✅ Extraction complete in ${elapsed}s`;
@@ -240,11 +243,14 @@
             currentView = view;
             document.getElementById('toggleFields').classList.toggle('active', view === 'fields');
             document.getElementById('toggleFullText').classList.toggle('active', view === 'fulltext');
+            document.getElementById('toggleMeta').classList.toggle('active', view === 'metadata');
             
             if (view === 'fields' && lastResult) {
                 resultJson.textContent = JSON.stringify(lastResult, null, 2);
             } else if (view === 'fulltext' && lastRawOutput) {
                 resultJson.textContent = lastRawOutput;
+            } else if (view === 'metadata' && lastMetadata) {
+                resultJson.textContent = JSON.stringify(lastMetadata, null, 2);
             } else if (lastRawOutput) {
                 resultJson.textContent = lastRawOutput;
             }

@@ -70,10 +70,23 @@ class ExtractionRequest(BaseModel):
     max_tokens: int = 4096
     temperature: float = 0.1
 
+class MetadataResponse(BaseModel):
+    filename: str = "not found"
+    file_size_bytes: int | None = None
+    file_type: str = "not found"
+    width: int | None = None
+    height: int | None = None
+    dpi: str = "not found"
+    color_mode: str = "not found"
+    bit_depth: str = "not found"
+    pages: int | None = None
+    exif: dict | None = None
+
 class ExtractionResponse(BaseModel):
     status: str
     data: dict | str | None
     raw_output: str
+    metadata: MetadataResponse | None = None
     processing_time_ms: int
     prompt_used: str
     model: str = MODEL_NAME
@@ -138,6 +151,66 @@ def resolve_prompt(custom: Optional[str], template: Optional[str]) -> str:
         return PROMPTS[template]
     return DEFAULT_PROMPT
 
+def extract_metadata(raw_bytes: bytes, img: Image.Image, filename: str = "unknown") -> MetadataResponse:
+    """Extract file and image metadata. Gracefully returns 'not found' for missing fields."""
+    meta = MetadataResponse()
+    try:
+        meta.filename = filename or "not found"
+        meta.file_size_bytes = len(raw_bytes)
+        
+        # File type from PIL
+        meta.file_type = img.format or "not found"
+        meta.width = img.width
+        meta.height = img.height
+        meta.color_mode = img.mode or "not found"
+        
+        # Bit depth
+        mode_bits = {"1": "1-bit", "L": "8-bit", "P": "8-bit", "RGB": "24-bit", "RGBA": "32-bit", 
+                     "CMYK": "32-bit", "I": "32-bit", "F": "32-bit", "LA": "16-bit"}
+        meta.bit_depth = mode_bits.get(img.mode, "not found")
+        
+        # DPI
+        dpi = img.info.get("dpi")
+        if dpi:
+            meta.dpi = f"{int(dpi[0])}x{int(dpi[1])}"
+        
+        # Pages (for TIFF/GIF)
+        try:
+            n = 0
+            while True:
+                img.seek(n)
+                n += 1
+        except EOFError:
+            meta.pages = n if n > 1 else 1
+        except Exception:
+            meta.pages = 1
+        # Reset to first frame
+        try:
+            img.seek(0)
+        except Exception:
+            pass
+        
+        # EXIF data
+        try:
+            from PIL.ExifTags import TAGS
+            exif_raw = img.getexif()
+            if exif_raw:
+                exif_dict = {}
+                for tag_id, val in exif_raw.items():
+                    tag_name = TAGS.get(tag_id, str(tag_id))
+                    try:
+                        exif_dict[tag_name] = str(val) if not isinstance(val, (str, int, float)) else val
+                    except:
+                        exif_dict[tag_name] = "not found"
+                meta.exif = exif_dict if exif_dict else None
+        except Exception:
+            meta.exif = None
+            
+    except Exception as e:
+        logger.warning(f"Metadata extraction error: {e}")
+    
+    return meta
+
 # ── Routes ──────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -166,11 +239,16 @@ async def extract_from_json(req: ExtractionRequest):
 
     if req.image_base64:
         raw_bytes = base64.b64decode(req.image_base64)
-        img = load_image(raw_bytes)
+        img_orig = Image.open(io.BytesIO(raw_bytes))
+        meta = extract_metadata(raw_bytes, img_orig, "uploaded_image")
+        img = img_orig.convert("RGB")
         b64 = image_to_base64(img)
     elif req.image_url:
         r = requests.get(req.image_url, timeout=30)
-        img = load_image(r.content)
+        raw_bytes = r.content
+        img_orig = Image.open(io.BytesIO(raw_bytes))
+        meta = extract_metadata(raw_bytes, img_orig, req.image_url.split("/")[-1])
+        img = img_orig.convert("RGB")
         b64 = image_to_base64(img)
     else:
         raise HTTPException(400, "Provide image_base64 or image_url")
@@ -183,6 +261,7 @@ async def extract_from_json(req: ExtractionRequest):
         status="ok",
         data=parsed,
         raw_output=raw,
+        metadata=meta,
         processing_time_ms=int((time.time() - t0) * 1000),
         prompt_used=prompt[:100] + "...",
     )
@@ -199,7 +278,13 @@ async def extract_from_upload(
     t0 = time.time()
 
     contents = await file.read()
-    img = load_image(contents)
+    try:
+        img_orig = Image.open(io.BytesIO(contents))
+        meta = extract_metadata(contents, img_orig, file.filename)
+        img = img_orig.convert("RGB")
+    except Exception:
+        img = load_image(contents)
+        meta = MetadataResponse(filename=file.filename or "not found", file_size_bytes=len(contents))
     b64 = image_to_base64(img)
 
     p = resolve_prompt(prompt, prompt_template)
@@ -210,6 +295,7 @@ async def extract_from_upload(
         status="ok",
         data=parsed,
         raw_output=raw,
+        metadata=meta,
         processing_time_ms=int((time.time() - t0) * 1000),
         prompt_used=p[:100] + "...",
     )
@@ -222,7 +308,13 @@ async def extract_batch(files: list[UploadFile] = File(...), prompt_template: Op
     for file in files:
         t0 = time.time()
         contents = await file.read()
-        img = load_image(contents)
+        try:
+            img_orig = Image.open(io.BytesIO(contents))
+            meta = extract_metadata(contents, img_orig, file.filename)
+            img = img_orig.convert("RGB")
+        except Exception:
+            img = load_image(contents)
+            meta = MetadataResponse(filename=file.filename or "not found", file_size_bytes=len(contents))
         b64 = image_to_base64(img)
         raw = call_vlm(b64, p)
         parsed = parse_json_output(raw)
@@ -231,6 +323,7 @@ async def extract_batch(files: list[UploadFile] = File(...), prompt_template: Op
             "status": "ok",
             "data": parsed,
             "raw_output": raw,
+            "metadata": meta.model_dump(),
             "processing_time_ms": int((time.time() - t0) * 1000),
         })
     return {"results": results, "total": len(results)}
