@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karna OCR — Document Intelligence</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+        
+        .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
+        
+        h1 { font-size: 2.4rem; font-weight: 700; margin-bottom: 8px; }
+        h1 span { color: #6c63ff; }
+        .subtitle { color: #888; font-size: 1.05rem; margin-bottom: 40px; }
+        
+        .upload-zone {
+            border: 2px dashed #333; border-radius: 16px; padding: 60px 40px;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+            background: #111; margin-bottom: 24px;
+        }
+        .upload-zone:hover, .upload-zone.dragover { border-color: #6c63ff; background: #1a1a2e; }
+        .upload-zone input { display: none; }
+        .upload-icon { font-size: 3rem; margin-bottom: 16px; }
+        .upload-text { font-size: 1.1rem; color: #aaa; }
+        .upload-text strong { color: #6c63ff; }
+        
+        .controls { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+        select, button {
+            padding: 10px 20px; border-radius: 8px; border: 1px solid #333;
+            background: #1a1a1a; color: #e0e0e0; font-size: 0.95rem; cursor: pointer;
+        }
+        select:focus, button:focus { outline: none; border-color: #6c63ff; }
+        .btn-extract {
+            background: #6c63ff; border-color: #6c63ff; color: #fff; font-weight: 600;
+            padding: 10px 32px; transition: all 0.2s;
+        }
+        .btn-extract:hover { background: #5a52d5; }
+        .btn-extract:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .preview-row { display: flex; gap: 24px; margin-top: 24px; }
+        .preview-col { flex: 1; min-width: 0; }
+        
+        .preview-img {
+            max-width: 100%; max-height: 500px; border-radius: 12px;
+            border: 1px solid #222; display: none;
+        }
+        
+        .result-box {
+            background: #111; border: 1px solid #222; border-radius: 12px;
+            padding: 20px; min-height: 200px; display: none;
+        }
+        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .result-header h3 { font-size: 1.1rem; }
+        .result-meta { color: #888; font-size: 0.85rem; }
+        .result-json {
+            background: #0d0d0d; border-radius: 8px; padding: 16px;
+            overflow-x: auto; font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.85rem; line-height: 1.6; max-height: 500px; overflow-y: auto;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .copy-btn {
+            padding: 6px 14px; font-size: 0.8rem; background: #222; border-color: #444;
+        }
+        
+        .status { padding: 12px 20px; border-radius: 8px; margin-bottom: 16px; display: none; }
+        .status.loading { display: block; background: #1a1a2e; border: 1px solid #6c63ff; color: #9d97ff; }
+        .status.error { display: block; background: #2e1a1a; border: 1px solid #ff6363; color: #ff9d9d; }
+        .status.success { display: block; background: #1a2e1a; border: 1px solid #63ff63; color: #9dff9d; }
+        
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #6c63ff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .templates-info { color: #666; font-size: 0.85rem; margin-top: 8px; }
+        
+        .footer { margin-top: 60px; text-align: center; color: #444; font-size: 0.85rem; }
+        .footer a { color: #6c63ff; text-decoration: none; }
+
+        @media (max-width: 768px) {
+            .preview-row { flex-direction: column; }
+            h1 { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><span>Karna</span> OCR</h1>
+        <p class="subtitle">Document Intelligence Engine — extract structured data from any document using AI vision</p>
+
+        <div class="upload-zone" id="dropZone">
+            <input type="file" id="fileInput" accept="image/*,.tif,.tiff,.pdf">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">Drop your document here or <strong>click to browse</strong></div>
+            <div style="color:#555; margin-top:8px; font-size:0.85rem;">PNG, JPG, TIFF, BMP, WebP</div>
+        </div>
+
+        <div class="controls">
+            <select id="templateSelect">
+                <option value="">General (any document)</option>
+                <option value="form">Form extraction</option>
+                <option value="invoice">Invoice / Receipt</option>
+                <option value="table">Table extraction</option>
+                <option value="handwriting">Handwritten text</option>
+                <option value="contract">Contract / Legal</option>
+            </select>
+            <button class="btn-extract" id="extractBtn" disabled>Extract Data</button>
+            <input type="text" id="apiUrl" placeholder="API URL" value="https://ocr.kaeva.app" 
+                   style="padding:10px 16px; border-radius:8px; border:1px solid #333; background:#1a1a1a; color:#e0e0e0; font-size:0.85rem; width:280px;">
+        </div>
+        <div class="templates-info">💡 Choose a template for optimized extraction, or use General for any document type.</div>
+
+        <div id="status" class="status"></div>
+
+        <div class="preview-row">
+            <div class="preview-col">
+                <img id="previewImg" class="preview-img">
+            </div>
+            <div class="preview-col">
+                <div class="result-box" id="resultBox">
+                    <div class="result-header">
+                        <h3>Extracted Data</h3>
+                        <div>
+                            <span class="result-meta" id="resultMeta"></span>
+                            <button class="copy-btn" id="copyBtn" onclick="copyResult()">Copy JSON</button>
+                        </div>
+                    </div>
+                    <div class="result-json" id="resultJson"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by Qwen3-VL-32B — <a href="https://github.com/Viraj-FG/Karna-OCR">GitHub</a></p>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const extractBtn = document.getElementById('extractBtn');
+        const previewImg = document.getElementById('previewImg');
+        const status = document.getElementById('status');
+        const resultBox = document.getElementById('resultBox');
+        const resultJson = document.getElementById('resultJson');
+        const resultMeta = document.getElementById('resultMeta');
+
+        let selectedFile = null;
+
+        // Drag & drop
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+        function handleFile(file) {
+            selectedFile = file;
+            extractBtn.disabled = false;
+            dropZone.querySelector('.upload-text').innerHTML = `<strong>${file.name}</strong> (${(file.size/1024).toFixed(0)} KB)`;
+            
+            const reader = new FileReader();
+            reader.onload = e => { previewImg.src = e.target.result; previewImg.style.display = 'block'; };
+            reader.readAsDataURL(file);
+        }
+
+        extractBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            
+            const apiUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+            const template = document.getElementById('templateSelect').value;
+            
+            extractBtn.disabled = true;
+            status.className = 'status loading';
+            status.innerHTML = '<span class="spinner"></span>Extracting data — this may take 10-30 seconds...';
+            resultBox.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            if (template) formData.append('prompt_template', template);
+
+            const t0 = Date.now();
+            try {
+                const resp = await fetch(`${apiUrl}/extract/upload`, { method: 'POST', body: formData });
+                const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+
+                const data = await resp.json();
+                
+                status.className = 'status success';
+                status.textContent = `✅ Extraction complete in ${elapsed}s`;
+                
+                resultBox.style.display = 'block';
+                resultMeta.textContent = `${data.processing_time_ms}ms server • ${elapsed}s total`;
+                
+                const display = data.data || data.raw_output;
+                resultJson.textContent = typeof display === 'object' ? JSON.stringify(display, null, 2) : display;
+            } catch (err) {
+                status.className = 'status error';
+                status.textContent = `❌ Error: ${err.message}`;
+            }
+            
+            extractBtn.disabled = false;
+        });
+
+        function copyResult() {
+            navigator.clipboard.writeText(resultJson.textContent);
+            document.getElementById('copyBtn').textContent = 'Copied!';
+            setTimeout(() => document.getElementById('copyBtn').textContent = 'Copy JSON', 2000);
+        }
+    </script>
+</body>
+</html>
