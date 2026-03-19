@@ -1,0 +1,46 @@
+# Karna VLM — Mid-size premium variant
+# ~4B total params, ~8GB VRAM, maximum quality
+
+model_name: karna-vlm-mid
+model_family: mid
+
+# Vision: SigLIP SO400M (400M params, frozen)
+vision_backend: siglip
+vision_model: google/siglip-so400m-patch14-384
+vision_freeze: true
+vision_select_layer: -1
+
+# Bridge: Instruction-conditioned (most capable)
+bridge_type: instruction_conditioned
+bridge_dim: 768
+bridge_num_queries: 96
+bridge_num_layers: 6
+bridge_num_heads: 12
+bridge_ffn_ratio: 4.0
+bridge_dropout: 0.1
+
+# Decoder: Qwen2.5-3B (frozen, LoRA-tuned)
+decoder_model: Qwen/Qwen2.5-3B
+decoder_freeze: true
+decoder_dtype: bfloat16
+
+# Prompt packing
+max_length: 4096
+image_token: "<image>"
+
+# Training defaults
+learning_rate: 0.00005
+weight_decay: 0.01
+warmup_steps: 1000
+max_steps: 100000
+
+# LoRA
+use_lora: false
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj

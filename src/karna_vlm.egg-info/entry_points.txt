@@ -1,0 +1,2 @@
+[console_scripts]
+karna = karna_vlm.cli:app

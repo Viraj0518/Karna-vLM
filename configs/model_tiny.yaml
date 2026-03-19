@@ -1,0 +1,44 @@
+# Karna VLM — Tiny/Edge variant
+# ~300M total params, <2GB VRAM, optimized for edge deployment
+
+model_name: karna-vlm-tiny
+model_family: tiny
+
+# Vision: SigLIP base (86M params, frozen)
+vision_backend: siglip
+vision_model: google/siglip-base-patch16-224
+vision_freeze: true
+vision_select_layer: -1
+
+# Bridge: Q-Former Lite (compact)
+bridge_type: qformer_lite
+bridge_dim: 256
+bridge_num_queries: 32
+bridge_num_layers: 2
+bridge_num_heads: 4
+bridge_ffn_ratio: 4.0
+bridge_dropout: 0.1
+
+# Decoder: Qwen2-0.5B (frozen, LoRA-tuned)
+decoder_model: Qwen/Qwen2-0.5B
+decoder_freeze: true
+decoder_dtype: bfloat16
+
+# Prompt packing
+max_length: 1024
+image_token: "<image>"
+
+# Training defaults
+learning_rate: 0.001
+weight_decay: 0.01
+warmup_steps: 200
+max_steps: 20000
+
+# LoRA (disabled by default; enable for Stage 2+)
+use_lora: false
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - v_proj

@@ -1,0 +1,18 @@
+# Stage 1: Bootstrap Alignment Training
+# Trains bridge only on image-caption pairs
+
+output_dir: outputs/stage1_bootstrap
+num_epochs: 1
+max_steps: 20000
+batch_size: 16
+gradient_accumulation_steps: 2
+learning_rate: 0.001
+weight_decay: 0.01
+warmup_steps: 200
+max_grad_norm: 1.0
+bf16: true
+fp16: false
+logging_steps: 10
+save_steps: 1000
+eval_steps: 1000
+seed: 42
