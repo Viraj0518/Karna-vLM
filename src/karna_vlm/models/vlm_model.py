@@ -437,6 +437,11 @@ class KarnaVLM(nn.Module):
             bridge_out = self.bridge_image(vision_out)
             image_features = bridge_out.projected_features
 
+        # Cast bridge output to decoder dtype (bridge=float32, decoder may be bfloat16)
+        if image_features is not None:
+            decoder_dtype = next(self.decoder.parameters()).dtype
+            image_features = image_features.to(dtype=decoder_dtype)
+
         # Pack prompt
         if text is not None and image_features is not None:
             # Single image for now; first in batch
@@ -493,6 +498,9 @@ class KarnaVLM(nn.Module):
             vision_out = self.encode_image(images)
             bridge_out = self.bridge_image(vision_out)
             image_features = bridge_out.projected_features[0]  # [num_tokens, dim]
+            # Cast to decoder dtype (bridge is float32, decoder may be bfloat16)
+            decoder_dtype = next(self.decoder.parameters()).dtype
+            image_features = image_features.to(dtype=decoder_dtype)
 
         # Pack prompt
         packed = self.packer.pack(text=prompt, image_embeds=image_features)
