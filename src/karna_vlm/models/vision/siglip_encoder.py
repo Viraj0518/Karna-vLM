@@ -27,7 +27,7 @@ class SigLIPEncoder(VisionEncoderInterface):
         freeze: Whether to freeze encoder weights (default True).
         select_layer: Which hidden layer to extract features from.
             -1 = last layer, -2 = second-to-last, etc.
-        device: Target device.
+        device: Target device (unused; kept for API compat).
     """
 
     # Sensible defaults for common SigLIP variants
@@ -43,7 +43,11 @@ class SigLIPEncoder(VisionEncoderInterface):
         super().__init__(freeze=freeze)
         self.model_name = model_name or self.DEFAULT_MODEL
         self.select_layer = select_layer
-        self._device = device
+        # Note: `device` arg is accepted for API compatibility but not used here.
+        # The caller should move the module to the desired device after construction
+        # (e.g. model.to(device)).  Preprocessing always returns CPU tensors so
+        # that DataLoader workers (which have no GPU access) can call preprocess()
+        # safely.
 
         # Lazy imports to keep the module importable without transformers installed
         from transformers import SiglipImageProcessor, SiglipVisionModel
@@ -106,14 +110,16 @@ class SigLIPEncoder(VisionEncoderInterface):
     def preprocess(self, images: list[Image.Image]) -> torch.Tensor:
         """Preprocess PIL images for SigLIP.
 
+        Returns CPU tensors — the training loop is responsible for moving
+        pixel values to the correct device.  This keeps preprocessing safe
+        inside multi-worker DataLoader workers (which cannot access the GPU).
+
         Args:
             images: List of PIL images (any size).
 
         Returns:
-            Tensor [B, C, H, W] on the encoder's device.
+            Tensor [B, C, H, W] on CPU with float32 dtype.
         """
         processed = self.processor(images=images, return_tensors="pt")
-        pixel_values: torch.Tensor = processed["pixel_values"]
-        # Move to same device as model
-        device = next(self.parameters()).device
-        return pixel_values.to(device=device, dtype=next(self.parameters()).dtype)
+        # Stay on CPU — caller moves to device as needed
+        return processed["pixel_values"]

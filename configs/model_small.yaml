@@ -1,10 +1,10 @@
 # Karna VLM — Small production variant
-# ~2B total params, ~4GB VRAM, balanced quality and efficiency
+# ~2.3B total params, ~5GB VRAM, balanced quality and efficiency
 
 model_name: karna-vlm-small
 model_family: small
 
-# Vision: SigLIP base (86M params, frozen)
+# Vision: SigLIP base (86M params, frozen) — Google, open weights
 vision_backend: siglip
 vision_model: google/siglip-base-patch16-224
 vision_freeze: true
@@ -19,8 +19,8 @@ bridge_num_heads: 8
 bridge_ffn_ratio: 4.0
 bridge_dropout: 0.1
 
-# Decoder: Qwen2-1.5B (frozen, LoRA-tuned)
-decoder_model: Qwen/Qwen2-1.5B
+# Decoder: Gemma 2-2B (Google, fully open weights + architecture, frozen + LoRA)
+decoder_model: google/gemma-2-2b
 decoder_freeze: true
 decoder_dtype: bfloat16
 

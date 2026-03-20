@@ -22,17 +22,17 @@ class HFDecoder(DecoderInterface):
     """HuggingFace AutoModelForCausalLM decoder wrapper.
 
     Args:
-        model_name: HuggingFace model identifier (e.g., "Qwen/Qwen2-0.5B").
+        model_name: HuggingFace model identifier (e.g., "google/gemma-2-2b").
         freeze: Whether to freeze decoder weights.
         torch_dtype: Model dtype (default bfloat16).
         device_map: Device placement strategy.
         trust_remote_code: Whether to trust remote code.
     """
 
-    # Recommended compact decoders by size tier
-    TINY = "Qwen/Qwen2-0.5B"
-    SMALL = "Qwen/Qwen2-1.5B"
-    MID = "Qwen/Qwen2.5-3B"
+    # Recommended compact decoders by size tier (US-origin, open weights + architecture)
+    TINY = "meta-llama/Llama-3.2-1B"
+    SMALL = "google/gemma-2-2b"
+    MID = "meta-llama/Llama-3.2-3B"
 
     def __init__(
         self,

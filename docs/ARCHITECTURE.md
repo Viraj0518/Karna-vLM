@@ -46,11 +46,11 @@ The core proprietary intelligence. Compresses and transforms vision features int
 
 ### 3. Decoder LLM (Mostly Frozen)
 
-Compact language model that generates text from the mixed multimodal sequence.
+Compact language model that generates text from the mixed multimodal sequence. All decoders are **US-origin, open-weights, open-architecture** — safe for government and regulated environments.
 
-- **Tiny:** Qwen2-0.5B (~500M params)
-- **Small:** Qwen2-1.5B (~1.5B params)
-- **Mid:** Qwen2.5-3B (~3B params)
+- **Tiny:** Llama 3.2-1B (Meta, ~1B params)
+- **Small:** Gemma 2-2B (Google, ~2B params)
+- **Mid:** Llama 3.2-3B (Meta, ~3B params)
 
 Frozen by default. Fine-tuned via LoRA adapters on attention projections.
 
@@ -87,9 +87,9 @@ All variants share the same API, training pipeline, dataset interface, and evalu
 
 | Variant | Vision | Bridge | Decoder | Total | VRAM |
 |---------|--------|--------|---------|-------|------|
-| Tiny/Edge | SigLIP-Base | QFormer-Lite (256d, 32q) | Qwen2-0.5B | ~0.6B | ~2GB |
-| Small | SigLIP-Base | QFormer-Lite (512d, 64q) | Qwen2-1.5B | ~1.7B | ~4GB |
-| Mid | SigLIP-SO400M | Instruction-Conditioned (768d, 96q) | Qwen2.5-3B | ~3.8B | ~8GB |
+| Tiny/Edge | SigLIP-Base | QFormer-Lite (256d, 32q) | Llama 3.2-1B (Meta) | ~1.2B | ~3GB |
+| Small | SigLIP-Base | QFormer-Lite (512d, 64q) | Gemma 2-2B (Google) | ~2.3B | ~5GB |
+| Mid | SigLIP-SO400M | Instruction-Conditioned (768d, 96q) | Llama 3.2-3B (Meta) | ~3.5B | ~8GB |
 
 ## Customization
 

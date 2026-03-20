@@ -26,7 +26,7 @@ class CLIPEncoder(VisionEncoderInterface):
         freeze: Whether to freeze encoder weights (default True).
         select_layer: Hidden layer index to extract features from.
         use_cls: Whether to include CLS token in patch features.
-        device: Target device.
+        device: Target device (unused; kept for API compat).
     """
 
     DEFAULT_MODEL = "openai/clip-vit-base-patch16"
@@ -43,6 +43,8 @@ class CLIPEncoder(VisionEncoderInterface):
         self.model_name = model_name or self.DEFAULT_MODEL
         self.select_layer = select_layer
         self.use_cls = use_cls
+        # Note: `device` arg accepted for API compat but not used here.
+        # Preprocessing always returns CPU tensors (DataLoader worker safety).
 
         from transformers import CLIPImageProcessor, CLIPVisionModel
 
@@ -109,13 +111,16 @@ class CLIPEncoder(VisionEncoderInterface):
     def preprocess(self, images: list[Image.Image]) -> torch.Tensor:
         """Preprocess PIL images for CLIP.
 
+        Returns CPU tensors — the training loop is responsible for moving
+        pixel values to the correct device.  This keeps preprocessing safe
+        inside multi-worker DataLoader workers (which cannot access the GPU).
+
         Args:
             images: List of PIL images.
 
         Returns:
-            Tensor [B, C, H, W].
+            Tensor [B, C, H, W] on CPU with float32 dtype.
         """
         processed = self.processor(images=images, return_tensors="pt")
-        pixel_values: torch.Tensor = processed["pixel_values"]
-        device = next(self.parameters()).device
-        return pixel_values.to(device=device, dtype=next(self.parameters()).dtype)
+        # Stay on CPU — caller moves to device as needed
+        return processed["pixel_values"]

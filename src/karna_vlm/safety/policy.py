@@ -10,19 +10,27 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import IntEnum
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class SafetyAction(str, Enum):
-    """Actions to take when safety policy is triggered."""
+class SafetyAction(IntEnum):
+    """Actions to take when safety policy is triggered.
 
-    ALLOW = "allow"
-    WARN = "warn"
-    REFUSE = "refuse"
-    REDACT = "redact"
+    Uses IntEnum so severity comparisons are numeric (not lexicographic).
+    Higher values = more restrictive actions.
+    """
+
+    ALLOW = 0
+    WARN = 1
+    REDACT = 2
+    REFUSE = 3
+
+    # Convenience string representation for logging
+    def __str__(self) -> str:
+        return self.name.lower()
 
 
 @dataclass
@@ -154,7 +162,8 @@ class SafetyPolicy:
 
             if matched:
                 triggered.append(rule.name)
-                if rule.action.value > action.value or self.strict_mode:
+                # IntEnum comparison — numerically correct
+                if rule.action > action or self.strict_mode:
                     action = rule.action
                 messages.append(rule.refusal_message)
 
@@ -163,12 +172,12 @@ class SafetyPolicy:
             self.audit_log.append({
                 "stage": stage,
                 "triggered_rules": triggered,
-                "action": action.value,
+                "action": str(action),
                 "text_preview": text[:200],
             })
             logger.warning(
                 "Safety %s check: rules=%s, action=%s",
-                stage, triggered, action.value,
+                stage, triggered, str(action),
             )
 
         return SafetyResult(

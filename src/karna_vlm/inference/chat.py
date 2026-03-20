@@ -30,6 +30,11 @@ class ChatSession:
     Maintains conversation history and manages image context
     across multiple turns.
 
+    Each user turn may include an image.  The prompt is built with an
+    ``<image>`` token for every turn that had an image, and the
+    corresponding ordered list of images is passed to ``generate()``
+    so that tokens and images stay aligned.
+
     Args:
         model: KarnaVLM instance.
         system_prompt: Optional system prompt.
@@ -49,6 +54,7 @@ class ChatSession:
         self.max_history_turns = max_history_turns
         self.max_new_tokens = max_new_tokens
         self.history: list[ChatMessage] = []
+        # Kept for backward compat (single latest image)
         self.current_image: Optional[Image.Image] = None
 
     def chat(
@@ -69,20 +75,19 @@ class ChatSession:
         Returns:
             Assistant response text.
         """
-        # Update image context
+        # Update latest-image tracker
         if image is not None:
             self.current_image = image
 
         # Add user message
         self.history.append(ChatMessage(role="user", content=message, image=image))
 
-        # Build prompt from history
-        prompt = self._build_prompt()
+        # Build prompt and collect all images (one per turn that has one)
+        prompt, images = self._build_prompt_and_images()
 
         # Generate
-        images = [self.current_image] if self.current_image else None
         response = self.model.generate(
-            images=images,
+            images=images if images else None,
             prompt=prompt,
             max_new_tokens=max_new_tokens or self.max_new_tokens,
             temperature=temperature,
@@ -97,23 +102,40 @@ class ChatSession:
 
         return response
 
-    def _build_prompt(self) -> str:
-        """Build full prompt from conversation history."""
+    def _build_prompt_and_images(self) -> tuple[str, list[Image.Image]]:
+        """Build full prompt and ordered image list from conversation history.
+
+        Returns:
+            (prompt_str, images_list) — one ``<image>`` token per image in
+            the prompt, matched positionally to the returned images list.
+        """
         parts = []
+        images: list[Image.Image] = []
+
         if self.system_prompt:
             parts.append(f"System: {self.system_prompt}")
 
         for msg in self.history:
             if msg.role == "user":
                 if msg.image is not None:
+                    # Add image token and track the image
                     parts.append(f"User: <image>\n{msg.content}")
+                    images.append(msg.image)
                 else:
                     parts.append(f"User: {msg.content}")
             elif msg.role == "assistant":
                 parts.append(f"Assistant: {msg.content}")
 
         parts.append("Assistant:")
-        return "\n".join(parts)
+        return "\n".join(parts), images
+
+    def _build_prompt(self) -> str:
+        """Build full prompt from conversation history (legacy, single-image).
+
+        Kept for backward compatibility.  Prefer ``_build_prompt_and_images()``.
+        """
+        prompt, _ = self._build_prompt_and_images()
+        return prompt
 
     def reset(self) -> None:
         """Clear conversation history."""

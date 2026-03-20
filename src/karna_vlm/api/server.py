@@ -13,13 +13,45 @@ import logging
 import time
 from typing import Any, Optional
 
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 # Global model reference (set by create_app)
 _model = None
 _safety_policy = None
+
+
+# ── Request/Response models (module-level for type stability) ──────
+
+
+class GenerateRequest(BaseModel):
+    image_base64: Optional[str] = None
+    image_url: Optional[str] = None
+    prompt: str = "Describe this image."
+    max_new_tokens: int = 256
+    temperature: float = 0.7
+
+
+class GenerateResponse(BaseModel):
+    text: str
+    processing_time_ms: float
+    model: str = "karna-vlm"
+
+
+class ExtractRequest(BaseModel):
+    image_base64: Optional[str] = None
+    fields: Optional[list[str]] = None
+    schema_hint: Optional[str] = None
+
+
+class HealthResponse(BaseModel):
+    status: str
+    model: str
+    version: str
 
 
 def create_app(
@@ -35,10 +67,6 @@ def create_app(
     Returns:
         FastAPI app instance.
     """
-    from fastapi import FastAPI, File, Form, UploadFile, HTTPException
-    from fastapi.middleware.cors import CORSMiddleware
-    from pydantic import BaseModel
-
     global _model, _safety_policy
     _model = model
     _safety_policy = safety_policy
@@ -55,30 +83,6 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # ── Request/Response models ─────────────────────────────
-
-    class GenerateRequest(BaseModel):
-        image_base64: Optional[str] = None
-        image_url: Optional[str] = None
-        prompt: str = "Describe this image."
-        max_new_tokens: int = 256
-        temperature: float = 0.7
-
-    class GenerateResponse(BaseModel):
-        text: str
-        processing_time_ms: float
-        model: str = "karna-vlm"
-
-    class ExtractRequest(BaseModel):
-        image_base64: Optional[str] = None
-        fields: Optional[list[str]] = None
-        schema_hint: Optional[str] = None
-
-    class HealthResponse(BaseModel):
-        status: str
-        model: str
-        version: str
 
     # ── Endpoints ────────────────────────────────────────────
 

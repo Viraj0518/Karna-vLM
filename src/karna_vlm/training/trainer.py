@@ -61,6 +61,7 @@ class TrainingConfig:
     save_steps: int = 500
     eval_steps: int = 500
     seed: int = 42
+    gradient_checkpointing: bool = False
 
 
 class VLMTrainer:
@@ -90,6 +91,17 @@ class VLMTrainer:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
+
+        # Gradient checkpointing (reduces VRAM at cost of recomputation)
+        if config.gradient_checkpointing:
+            if hasattr(self.model, "decoder") and hasattr(self.model.decoder, "model"):
+                try:
+                    self.model.decoder.model.gradient_checkpointing_enable()
+                    logger.info("Gradient checkpointing enabled on decoder")
+                except Exception as exc:
+                    logger.warning("Could not enable gradient checkpointing: %s", exc)
+            else:
+                logger.warning("gradient_checkpointing=True but decoder.model not found")
 
         # Setup optimizer (only trainable params)
         self.optimizer = self._build_optimizer()

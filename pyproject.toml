@@ -76,9 +76,9 @@ all = ["karna-vlm[train,eval,serve,export,dev]"]
 karna = "karna_vlm.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/Viraj0518/Karna-OCR"
-Documentation = "https://github.com/Viraj0518/Karna-OCR/tree/main/docs"
-Repository = "https://github.com/Viraj0518/Karna-OCR"
+Homepage = "https://github.com/Viraj0518/Karna-VLM"
+Documentation = "https://github.com/Viraj0518/Karna-VLM/tree/main/docs"
+Repository = "https://github.com/Viraj0518/Karna-VLM"
 
 [tool.setuptools.packages.find]
 where = ["src"]

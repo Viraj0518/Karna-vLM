@@ -105,11 +105,11 @@ TEMPLATES: dict[str, PromptTemplate] = {
         user_template="<image>\nExtract the following information:\n{prompt}\nOutput JSON:",
     ),
 
-    # Qwen-style chat template
-    "qwen_chat": PromptTemplate(
-        name="qwen_chat",
-        system_prompt="<|im_start|>system\nYou are a helpful assistant.<|im_end|>",
-        user_template="<|im_start|>user\n<image>\n{prompt}<|im_end|>\n<|im_start|>assistant\n",
+    # Llama-style chat template
+    "llama_chat": PromptTemplate(
+        name="llama_chat",
+        system_prompt="<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nYou are a helpful assistant.<|eot_id|>",
+        user_template="<|start_header_id|>user<|end_header_id|>\n<image>\n{prompt}<|eot_id|>\n<|start_header_id|>assistant<|end_header_id|>\n",
     ),
 }
 

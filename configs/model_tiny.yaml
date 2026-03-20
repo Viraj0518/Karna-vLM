@@ -1,10 +1,10 @@
 # Karna VLM — Tiny/Edge variant
-# ~300M total params, <2GB VRAM, optimized for edge deployment
+# ~1.2B total params, ~3GB VRAM, optimized for edge deployment
 
 model_name: karna-vlm-tiny
 model_family: tiny
 
-# Vision: SigLIP base (86M params, frozen)
+# Vision: SigLIP base (86M params, frozen) — Google, open weights
 vision_backend: siglip
 vision_model: google/siglip-base-patch16-224
 vision_freeze: true
@@ -19,8 +19,8 @@ bridge_num_heads: 4
 bridge_ffn_ratio: 4.0
 bridge_dropout: 0.1
 
-# Decoder: Qwen2-0.5B (frozen, LoRA-tuned)
-decoder_model: Qwen/Qwen2-0.5B
+# Decoder: Llama 3.2-1B (Meta, open weights, frozen + LoRA)
+decoder_model: meta-llama/Llama-3.2-1B
 decoder_freeze: true
 decoder_dtype: bfloat16
 

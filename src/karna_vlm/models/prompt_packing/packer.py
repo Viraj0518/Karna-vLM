@@ -50,6 +50,11 @@ class PromptPacker:
     4. Builds attention masks and optional training labels
     5. Pads sequences to max_length for batching
 
+    Label construction tokenizes prompt and response separately and builds
+    the label tensor by masking the prompt tokens with -100 (only the
+    response portion receives loss signal).  This avoids BPE boundary
+    artifacts from concatenation.
+
     Args:
         tokenizer: HuggingFace tokenizer.
         embed_fn: Callable that maps token IDs to embeddings (decoder.embed_tokens).
@@ -82,7 +87,9 @@ class PromptPacker:
         Args:
             text: Text prompt, may contain ``<image>`` placeholder.
             image_embeds: [num_image_tokens, hidden_dim] from bridge output.
-            labels_text: Optional target text for computing labels.
+            labels_text: Optional target response text for computing labels.
+                Tokenized separately from the prompt to avoid BPE boundary
+                issues — only response tokens receive loss signal.
             mask_image_in_labels: If True, mask image positions in labels with -100.
             mask_prompt_in_labels: If True, mask the prompt portion in labels.
 
@@ -101,10 +108,12 @@ class PromptPacker:
             parts = ["", " " + text]
             num_image_slots = 1
 
-        # Tokenize each text part
+        # Tokenize each text part and build embedding sequence
         all_embeds: list[torch.Tensor] = []
         all_types: list[int] = []  # 0=text, 1=image
         image_positions: list[tuple[int, int]] = []
+        # Track how many text token positions were produced (for label alignment)
+        prompt_token_count = 0
         current_pos = 0
 
         for i, part in enumerate(parts):
@@ -122,8 +131,10 @@ class PromptPacker:
 
                 text_embeds = self.embed_fn(tokens).squeeze(0)  # [T, dim]
                 all_embeds.append(text_embeds.to(dtype))
-                all_types.extend([0] * text_embeds.shape[0])
-                current_pos += text_embeds.shape[0]
+                n_text = text_embeds.shape[0]
+                all_types.extend([0] * n_text)
+                prompt_token_count += n_text
+                current_pos += n_text
 
             # Insert image tokens (except after the last text part)
             if i < num_image_slots and image_embeds is not None:
@@ -150,30 +161,43 @@ class PromptPacker:
         # Build attention mask (no padding in single-example packing)
         attention_mask = torch.ones(seq_len, dtype=torch.long, device=device)
 
-        # Build labels if requested
+        # ── Label construction ────────────────────────────────────────────────
+        # Tokenize prompt and response *separately* to avoid BPE merges at the
+        # boundary changing token boundaries vs. when concatenated.  Only the
+        # response token IDs are placed into the label tensor; prompt positions
+        # (and image positions) get -100.
         labels = None
         if labels_text is not None:
-            full_text = text.replace(self.image_token, "")
-            if labels_text not in full_text:
-                full_text = full_text + labels_text
-            _label_out = self.tokenizer(
-                full_text + labels_text,
+            labels = torch.full((seq_len,), -100, dtype=torch.long, device=device)
+
+            # Tokenize the response text alone
+            resp_out = self.tokenizer(
+                labels_text,
                 return_tensors="pt",
                 add_special_tokens=False,
             )
-            label_tokens = (_label_out["input_ids"] if isinstance(_label_out, dict) else _label_out.input_ids).squeeze(0)
+            response_tokens = (
+                resp_out["input_ids"] if isinstance(resp_out, dict) else resp_out.input_ids
+            ).squeeze(0).to(device)
 
-            # Create label tensor, pad/truncate to seq_len
-            labels = torch.full((seq_len,), -100, dtype=torch.long, device=device)
-            # Only the response portion gets real labels
-            # For simplicity, label the last N tokens
-            _resp_out = self.tokenizer(
-                labels_text, return_tensors="pt", add_special_tokens=False
-            )
-            response_tokens = (_resp_out["input_ids"] if isinstance(_resp_out, dict) else _resp_out.input_ids).squeeze(0).to(device)
-            n_resp = min(response_tokens.shape[0], seq_len)
-            labels[-n_resp:] = response_tokens[:n_resp]
+            n_resp = response_tokens.shape[0]
 
+            if not mask_prompt_in_labels:
+                # Full sequence gets labels (prompt + response)
+                # Place response tokens right after the prompt text positions
+                resp_start = min(prompt_token_count, seq_len)
+                available = seq_len - resp_start
+                if available > 0:
+                    place = min(n_resp, available)
+                    labels[resp_start : resp_start + place] = response_tokens[:place]
+            else:
+                # Only the last n_resp positions get response labels
+                resp_start = max(0, seq_len - n_resp)
+                available = seq_len - resp_start
+                place = min(n_resp, available)
+                labels[seq_len - place :] = response_tokens[:place]
+
+            # Mask image token positions regardless
             if mask_image_in_labels:
                 for start, end in image_positions:
                     if start < seq_len:

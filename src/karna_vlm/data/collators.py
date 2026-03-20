@@ -3,6 +3,20 @@ Data collators for batching VLM samples.
 
 Handles image preprocessing, prompt packing, and padding/truncation
 for efficient batched training.
+
+Two collators are provided:
+
+``VLMTrainingCollator``  (recommended for training)
+    Returns raw pixel_values (CPU tensors) + tokenized text.  The model's
+    ``forward_train()`` method handles vision encoding, bridge, packing, and
+    label alignment inside the training forward pass, so bridge gradients
+    flow correctly.
+
+``VLMCollator``  (legacy / inference)
+    Pre-computes bridge features inside the collator.  Useful for evaluation
+    or when you only need ``inputs_embeds`` (e.g. non-training forward pass).
+    Note: bridge runs under ``torch.no_grad()`` — not suitable for training
+    the bridge end-to-end.
 """
 
 from __future__ import annotations
@@ -17,11 +31,58 @@ from karna_vlm.models.prompt_packing.packer import PromptPacker
 
 
 @dataclass
-class VLMCollator:
-    """Collator for VLM training batches.
+class VLMTrainingCollator:
+    """Training collator that preserves gradient flow through the bridge.
 
-    Takes raw dataset outputs (dicts with 'image', 'prompt', 'response')
-    and produces tensors ready for the model.
+    Returns raw pixel_values + tokenized prompts/responses so the model's
+    ``forward_train()`` method can run the full pipeline (vision → bridge →
+    pack → decode) with gradient flow through the bridge.
+
+    Args:
+        vision_encoder: The vision encoder (for preprocessing images only).
+        packer: The prompt packer (used for tokenising text).
+        max_length: Maximum sequence length.
+    """
+
+    vision_encoder: Any  # VisionEncoderInterface
+    packer: PromptPacker
+    max_length: int = 2048
+
+    def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
+        """Collate a batch of VLM samples.
+
+        Args:
+            batch: List of dicts from VLMDataset.__getitem__.
+                   Each dict must contain 'image', 'prompt', 'response'.
+
+        Returns:
+            Dict with:
+                pixel_values  — [B, C, H, W] CPU tensors
+                prompts       — list[str]
+                responses     — list[str]
+        """
+        images: list[Image.Image] = [item["image"] for item in batch]
+        prompts: list[str] = [item["prompt"] for item in batch]
+        responses: list[str] = [item["response"] for item in batch]
+
+        # Preprocessing keeps tensors on CPU (DataLoader worker-safe).
+        # The training loop moves pixel_values to device before the forward pass.
+        pixel_values = self.vision_encoder.preprocess(images)  # [B, C, H, W] CPU
+
+        return {
+            "pixel_values": pixel_values,
+            "prompts": prompts,
+            "responses": responses,
+        }
+
+
+@dataclass
+class VLMCollator:
+    """Collator for VLM evaluation/inference batches.
+
+    Pre-computes bridge features and packs sequences.  Bridge runs under
+    ``torch.no_grad()`` so this collator is **not** suitable for training
+    the bridge — use ``VLMTrainingCollator`` instead.
 
     Args:
         vision_encoder: The vision encoder (for preprocessing images).
@@ -48,11 +109,13 @@ class VLMCollator:
         prompts = [item["prompt"] for item in batch]
         responses = [item["response"] for item in batch]
 
-        # Preprocess and encode images
+        # Preprocess images (returns CPU tensors)
         pixel_values = self.vision_encoder.preprocess(images)
+
+        # Encode + bridge under no_grad (eval / feature extraction path)
         with torch.no_grad():
             vision_out = self.vision_encoder(pixel_values)
-        bridge_out = self.bridge(vision_out)
+            bridge_out = self.bridge(vision_out)
 
         # Pack each example
         packed_list = []
